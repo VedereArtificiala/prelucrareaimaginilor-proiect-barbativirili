@@ -84,7 +84,6 @@ class MainActivity : AppCompatActivity() {
     var context: Context = this@MainActivity
     var ok = true
     var cam_preview: PreviewView? = null
-    var switch_cam: Button? = null
     var detect_recognize: Button? = null
     var graphicOverlay: GraphicOverlay? = null
     var isRecognizing = false
@@ -93,7 +92,6 @@ class MainActivity : AppCompatActivity() {
     private val savedFaces = HashMap<String, Bitmap?>() //saved Faces from detected faces
     var scaled: Bitmap? = null
     var showDetected = false
-    var selected_cam = CameraSelector.LENS_FACING_BACK
     var preview_the_face: ImageView? = null
     var threshold_distance = 1.0f
     var tensorfLite: Interpreter? = null
@@ -101,7 +99,6 @@ class MainActivity : AppCompatActivity() {
     var meniu: Button? = null
     var faceDetector: FaceDetector? = null
     var switchCamera = false
-    var cameraProvider: ProcessCameraProvider? = null
     var face_adder: ImageButton? = null
     private val scaledLock = Any()
 
@@ -115,7 +112,6 @@ class MainActivity : AppCompatActivity() {
         face_adder!!.visibility = View.INVISIBLE
         preview_the_face!!.visibility = View.INVISIBLE
         detect_recognize = findViewById(R.id.detect_recognize)
-        switch_cam = findViewById(R.id.switchCam)
         meniu = findViewById(R.id.meniu)
         graphicOverlay = findViewById(R.id.graphic_overlay)
         cam_preview = findViewById(R.id.cam_realtime)
@@ -144,23 +140,10 @@ class MainActivity : AppCompatActivity() {
 
         face_adder?.setOnClickListener { face_adder() }
 
-
-        switch_cam?.setOnClickListener {
-            if (selected_cam == CameraSelector.LENS_FACING_BACK) {
-                switchCamera = true
-                selected_cam = CameraSelector.LENS_FACING_FRONT
-            } else {
-                switchCamera = false
-                selected_cam = CameraSelector.LENS_FACING_BACK
-            }
-            cameraProvider?.unbindAll()
-            initializeCamera()
-        }
-
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != 0) {
             ActivityCompat.requestPermissions(this, arrayOf("android.permission.CAMERA"), 100)
         }
-
+        initializeCamera()
         detect_recognize?.setOnClickListener {
             when (detect_recognize?.text.toString()) {
                 "FACE RECOGNITION" -> {
@@ -181,7 +164,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        initializeCamera()
+
     }
 
 
@@ -340,7 +323,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun createLensFacingSelector(): CameraSelector {
-        return CameraSelector.Builder().requireLensFacing(selected_cam).build()
+        return CameraSelector.Builder().requireLensFacing(CameraSelector.LENS_FACING_BACK).build()
     }
 
     private fun createImageAnalysisUseCase(): ImageAnalysis {
@@ -436,45 +419,60 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadFacesFromGallery() {
-        ok = false
-        val intent = Intent()
-        intent.type = "image/*"
-        intent.action = Intent.ACTION_GET_CONTENT
-        startActivityForResult(Intent.createChooser(intent, "Select Picture"), 1)
+        val content_intent = Intent().apply {
+            type = "image/*"
+            action = "android.intent.action.GET_CONTENT"
+        }
+        startActivityForResult(Intent.createChooser(content_intent, "Select Picture"), 1)
     }
 
-    public override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (resultCode == RESULT_OK && requestCode == 1 && data != null) {
-            val selectedImageUri = data.data
-            try {
+    public override fun onActivityResult(rqCode: Int, resCode: Int, data: Intent?) {
+        super.onActivityResult(rqCode, resCode, data)
+
+        if (resCode == -1 && rqCode == 1 && data != null) {
+            val selectedImageUri: Uri? = data.data
                 val frameBitmap = decodeBitmapFromUri(selectedImageUri)
                 processImage(frameBitmap)
-            } catch (e: IOException) {
-                e.printStackTrace()
-            }
-        }
+
+    }
     }
 
     private fun processImage(frameBitmap: Bitmap) {
         val inputImage = InputImage.fromBitmap(frameBitmap, 0)
+
         faceDetector!!.process(inputImage)
-                .addOnSuccessListener { faces: List<Face> ->
-                    if (!faces.isEmpty()) {
-                        graphicOverlay!!.clearOverlay()
-                        val face = faces[0]
-                        val croppedFace = cropBitmap(transformBitmap(frameBitmap, 0, switchCamera), RectF(face.boundingBox))
-                        scaled = resizeImage(croppedFace, 112, 112)
-                        preview_the_face!!.setImageBitmap(scaled)
-                        val boundingBox = RectF(face.boundingBox)
-                        face_adder()
-                        recognizeImage(scaled, boundingBox)
-                    }
-                }
-                .addOnFailureListener { e: Exception? ->
-                    ok = true
-                    Toast.makeText(context, "Failed to add", Toast.LENGTH_SHORT).show()
-                }
+            .addOnSuccessListener { faces: List<Face> ->
+                handleFaceDetectionSuccess(faces, frameBitmap)
+            }
+            .addOnFailureListener { e: Exception? ->
+                handleFaceDetectionFailure()
+            }
+    }
+
+    private fun handleFaceDetectionSuccess(faces: List<Face>, frameBitmap: Bitmap) {
+        if (faces.isNotEmpty()) {
+            graphicOverlay!!.clearOverlay()
+            val detectedFace = faces[0]
+            val boundingBox = RectF(detectedFace.boundingBox)
+            scaled = preprocessFaceImage(frameBitmap, boundingBox)
+            displayProcessedFaceImage(scaled!!)
+            recognizeImage(scaled, boundingBox)
+        }
+    }
+
+    private fun preprocessFaceImage(frameBitmap: Bitmap, boundingBox: RectF): Bitmap {
+        val rotatedBitmap = transformBitmap(frameBitmap, 0, false)
+        val croppedFace = cropBitmap(rotatedBitmap, boundingBox)
+        return resizeImage(croppedFace, 112, 112)
+    }
+
+    private fun displayProcessedFaceImage(processedImage: Bitmap) {
+        preview_the_face!!.setImageBitmap(processedImage)
+        face_adder()
+    }
+    private fun handleFaceDetectionFailure() {
+        ok = true
+        Toast.makeText(context, "Failed to add", Toast.LENGTH_SHORT).show()
     }
 
     //TAKE DATA FROM LOCAL STORAGE AND CONVERT TO BITMAP
@@ -516,11 +514,11 @@ class MainActivity : AppCompatActivity() {
                 .add(ResizeOp(112, 112, ResizeOp.ResizeMethod.BILINEAR))
                 .add(NormalizeOp(128.0f, 128.0f))
                 .build()
-        var inputImage = TensorImage(DataType.FLOAT32)
-        inputImage.load(bitmap)
-        inputImage = imageProcessor.process(inputImage)
+        var input_for_model = TensorImage(DataType.FLOAT32)
+        input_for_model.load(bitmap)
+        input_for_model = imageProcessor.process(input_for_model)
 
-        val imgData = inputImage.buffer
+        val imgData = input_for_model.buffer
 
         val inputArray = arrayOf<Any>(imgData)
         val outputMap: MutableMap<Int, Any> = HashMap()
@@ -597,7 +595,10 @@ class MainActivity : AppCompatActivity() {
         private fun transformBitmap(originalBitmap: Bitmap?, rotDegrees: Int, switchCamera: Boolean): Bitmap {
             val transformationMatrix = Matrix()
             transformationMatrix.postRotate(rotDegrees.toFloat())
-            transformationMatrix.postScale(if (switchCamera) -1.0f else 1.0f, 1.0f)
+            if(switchCamera)
+                transformationMatrix.postScale(-1.0f , 1.0f)
+            else
+                transformationMatrix.postScale(1.0f , 1.0f)
             return Bitmap.createBitmap(originalBitmap!!, 0, 0, originalBitmap.width, originalBitmap.height, transformationMatrix, true)
 
         }
