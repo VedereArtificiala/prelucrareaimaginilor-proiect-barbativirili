@@ -327,7 +327,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun createImageAnalysisUseCase(): ImageAnalysis {
         return ImageAnalysis.Builder()
-                .setTargetResolution(Size(640, 480))
+                .setTargetResolution(Size(1024, 768))
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
     }
