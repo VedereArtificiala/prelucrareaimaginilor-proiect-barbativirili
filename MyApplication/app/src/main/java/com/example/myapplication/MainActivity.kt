@@ -98,7 +98,6 @@ class MainActivity : AppCompatActivity() {
     private val handler = Handler(Looper.getMainLooper())
     var meniu: Button? = null
     var faceDetector: FaceDetector? = null
-    var switchCamera = false
     var face_adder: ImageButton? = null
     private val scaledLock = Any()
 
@@ -390,12 +389,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun processDetectedFace(face: Face, imageProxy: ImageProxy): Bitmap {
         val frameBitmap = getBitmapFromImageProxy(imageProxy)
-        val rotatedBitmap = transformBitmap(frameBitmap, imageProxy.imageInfo.rotationDegrees, false)
+        val rotatedBitmap = transformBitmap(frameBitmap, imageProxy.imageInfo.rotationDegrees)
         val boundingBox = RectF(face.boundingBox)
         var croppedFaceBitmap = cropBitmap(rotatedBitmap, boundingBox)
-        if (switchCamera) {
-            croppedFaceBitmap = transformBitmap(croppedFaceBitmap, 0, switchCamera)
-        }
+        croppedFaceBitmap = transformBitmap(croppedFaceBitmap, 0)
         return resizeImage(croppedFaceBitmap, 112, 112)
     }
 
@@ -437,31 +434,31 @@ class MainActivity : AppCompatActivity() {
     }
     }
 
-    private fun processImage(frameBitmap: Bitmap) {
-        val inputImage = InputImage.fromBitmap(frameBitmap, 0)
+    private fun processImage(bit: Bitmap) {
+        val inputImage = InputImage.fromBitmap(bit, 0)
 
         faceDetector!!.process(inputImage)
             .addOnSuccessListener { faces: List<Face> ->
-                handleFaceDetectionSuccess(faces, frameBitmap)
+                handleFaceDetectionSuccess(faces, bit)
             }
             .addOnFailureListener { e: Exception? ->
                 handleFaceDetectionFailure()
             }
     }
 
-    private fun handleFaceDetectionSuccess(faces: List<Face>, frameBitmap: Bitmap) {
+    private fun handleFaceDetectionSuccess(faces: List<Face>, bit: Bitmap) {
         if (faces.isNotEmpty()) {
             graphicOverlay!!.clearOverlay()
             val detectedFace = faces[0]
             val boundingBox = RectF(detectedFace.boundingBox)
-            scaled = preprocessFaceImage(frameBitmap, boundingBox)
+            scaled = preprocessFaceImage(bit, boundingBox)
             displayProcessedFaceImage(scaled!!)
             recognizeImage(scaled, boundingBox)
         }
     }
 
     private fun preprocessFaceImage(frameBitmap: Bitmap, boundingBox: RectF): Bitmap {
-        val rotatedBitmap = transformBitmap(frameBitmap, 0, false)
+        val rotatedBitmap = transformBitmap(frameBitmap, 0)
         val croppedFace = cropBitmap(rotatedBitmap, boundingBox)
         return resizeImage(croppedFace, 112, 112)
     }
@@ -592,12 +589,9 @@ class MainActivity : AppCompatActivity() {
             return croppedBitmap
         }
 
-        private fun transformBitmap(originalBitmap: Bitmap?, rotDegrees: Int, switchCamera: Boolean): Bitmap {
+        private fun transformBitmap(originalBitmap: Bitmap?, rotDegrees: Int): Bitmap {
             val transformationMatrix = Matrix()
             transformationMatrix.postRotate(rotDegrees.toFloat())
-            if(switchCamera)
-                transformationMatrix.postScale(-1.0f , 1.0f)
-            else
                 transformationMatrix.postScale(1.0f , 1.0f)
             return Bitmap.createBitmap(originalBitmap!!, 0, 0, originalBitmap.width, originalBitmap.height, transformationMatrix, true)
 
