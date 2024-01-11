@@ -506,22 +506,22 @@ class MainActivity : AppCompatActivity() {
         savedFaces.clear()
     }
 
-    fun recognizeImage(bitmap: Bitmap?, boundingBox: RectF?) {
+    fun recognizeImage(inputBit: Bitmap?, boundingBox: RectF?) {
         val imageProcessor = ImageProcessor.Builder()
                 .add(ResizeOp(112, 112, ResizeOp.ResizeMethod.BILINEAR))
                 .add(NormalizeOp(128.0f, 128.0f))
                 .build()
         var input_for_model = TensorImage(DataType.FLOAT32)
-        input_for_model.load(bitmap)
+        input_for_model.load(inputBit)
         input_for_model = imageProcessor.process(input_for_model)
 
         val imgData = input_for_model.buffer
 
-        val inputArray = arrayOf<Any>(imgData)
-        val outputMap: MutableMap<Int, Any> = HashMap()
+        val input = arrayOf<Any>(imgData)
+        val outHashMap: MutableMap<Int, Any> = HashMap()
         encodings = Array(1) { FloatArray(192) }
-        outputMap[0] = encodings
-        tensorfLite!!.runForMultipleInputsOutputs(inputArray, outputMap)
+        outHashMap[0] = encodings
+        tensorfLite!!.runForMultipleInputsOutputs(input, outHashMap)
 
         if (savedRegistered.size > 0) {
             val nearest = findNearest(encodings[0])
@@ -583,9 +583,6 @@ class MainActivity : AppCompatActivity() {
             paint.color = Color.WHITE
             canvas.drawRect(destRect, paint)
             canvas.drawBitmap(sourceBitmap!!, sourceRect, destRect, paint)
-            if (sourceBitmap != null && !sourceBitmap.isRecycled) {
-                sourceBitmap.recycle()
-            }
             return croppedBitmap
         }
 
